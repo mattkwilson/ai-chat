@@ -40,7 +40,9 @@ async fn list_models() -> Result<Vec<String>, String> {
         .get("http://127.0.0.1:11434/api/tags")
         .send()
         .await
-        .map_err(|e| format!("Request error: {}", e))?;
+        .map_err(|e| format!("Request error: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("HTTP error: {}", e))?;
 
     let json: serde_json::Value = response
         .json()
