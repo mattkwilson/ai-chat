@@ -14,6 +14,7 @@ Built with [Tauri](https://tauri.app), React, and Rust.
 ## Requirements
 
 - [Node.js](https://nodejs.org) (v18+)
+- [pnpm](https://pnpm.io)
 - [Rust](https://rustup.rs)
 - [Ollama](https://ollama.com) running locally with at least one model pulled
 
@@ -21,16 +22,16 @@ Built with [Tauri](https://tauri.app), React, and Rust.
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Run in development mode
-npm run tauri dev
+pnpm tauri dev
 ```
 
 To build a production app:
 
 ```bash
-npm run tauri build
+pnpm tauri build
 ```
 
 ## Usage
