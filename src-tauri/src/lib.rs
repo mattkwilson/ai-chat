@@ -179,8 +179,12 @@ async fn extract_pdf_text(data: String) -> Result<String, String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&data)
         .map_err(|e| format!("Base64 decode error: {}", e))?;
-    let text = pdf_extract::extract_text_from_mem(&bytes)
-        .map_err(|e| format!("PDF extraction error: {}", e))?;
+    let text = tokio::task::spawn_blocking(move || {
+        pdf_extract::extract_text_from_mem(&bytes)
+            .map_err(|e| format!("PDF extraction error: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))??;
     Ok(text)
 }
 
