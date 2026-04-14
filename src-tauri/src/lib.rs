@@ -84,6 +84,23 @@ async fn ollama_chat(app: tauri::AppHandle, cancel: tauri::State<'_, CancelToken
         .await
         .map_err(|e| format!("Request error: {}", e))?;
 
+    if let Err(e) = response.error_for_status_ref() {
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|read_err| format!("Failed to read error body: {}", read_err));
+        let error_message = if body.trim().is_empty() {
+            format!("Ollama request failed with status {}: {}", status, e)
+        } else {
+            format!("Ollama request failed with status {}: {}", status, body)
+        };
+
+        app.emit("ollama-error", &error_message).ok();
+        app.emit("ollama-done", ()).ok();
+        return Err(error_message);
+    }
+
     let mut buffer = String::new();
     let mut full_content = String::new();
     let mut stream = response.bytes_stream();
