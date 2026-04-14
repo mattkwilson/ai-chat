@@ -20,6 +20,8 @@ function App() {
   const messagesRef = useRef<HTMLDivElement>(null);
   const hasStartedRef = useRef<boolean>(false);
   const [thumbStyle, setThumbStyle] = useState({ top: 0, height: 0 });
+  const resolveRef = useRef<(() => void) | null>(null);
+  const rejectRef = useRef<((reason: string) => void) | null>(null);
 
   useEffect(() => {
     invoke<string[]>('list_models')
@@ -28,6 +30,42 @@ function App() {
         if (list.length > 0) setModel(list[0]);
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let unlistenChunk: (() => void) | null = null;
+    let unlistenDone: (() => void) | null = null;
+
+    const setup = async () => {
+      unlistenChunk = await listen('ollama-chunk', (event) => {
+        const text = event.payload as string;
+        if (!hasStartedRef.current) {
+          if (!text.trim()) return;
+          setMessages((current) => [...current, { role: "assistant", content: text }]);
+          hasStartedRef.current = true;
+        } else {
+          setMessages((current) => {
+            const msgs = [...current];
+            msgs[msgs.length - 1].content = text;
+            return msgs;
+          });
+        }
+      });
+
+      unlistenDone = await listen('ollama-done', () => {
+        setLoading(false);
+        resolveRef.current?.();
+        resolveRef.current = null;
+        rejectRef.current = null;
+      });
+    };
+
+    setup();
+
+    return () => {
+      unlistenChunk?.();
+      unlistenDone?.();
+    };
   }, []);
 
   const updateThumb = () => {
@@ -58,9 +96,7 @@ function App() {
   const sendMessage = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     const prompt = input.trim();
-    if (!prompt) {
-      return;
-    }
+    if (!prompt) return;
 
     setError(null);
     setInput("");
@@ -71,28 +107,15 @@ function App() {
     hasStartedRef.current = false;
 
     try {
-      const unlistenChunk = await listen('ollama-chunk', (event) => {
-        const text = event.payload as string;
-        if (!hasStartedRef.current) {
-          if (!text.trim()) return;
-          setMessages((current) => [...current, { role: "assistant", content: text }]);
-          hasStartedRef.current = true;
-        } else {
-          setMessages((current) => {
-            const newMessages = [...current];
-            newMessages[newMessages.length - 1].content = text;
-            return newMessages;
-          });
-        }
+      await new Promise<void>((resolve, reject) => {
+        resolveRef.current = resolve;
+        rejectRef.current = reject;
+        invoke('ollama_chat', { prompt, model }).catch((err) => {
+          rejectRef.current?.(err);
+          rejectRef.current = null;
+          resolveRef.current = null;
+        });
       });
-
-      const unlistenDone = await listen('ollama-done', () => {
-        setLoading(false);
-        unlistenChunk();
-        unlistenDone();
-      });
-
-      await invoke('ollama_chat', { prompt, model });
     } catch (err) {
       const message =
         typeof err === "string"
@@ -107,6 +130,7 @@ function App() {
 
   const cancelMessage = () => {
     invoke('cancel_chat').catch(() => {});
+    // backend will emit ollama-done which resolves the promise and clears loading
   };
 
   const clearChat = () => {
