@@ -80,15 +80,27 @@ async fn ollama_chat(
     cancel: tauri::State<'_, CancelToken>,
     prompt: &str,
     model: &str,
+    images: Option<Vec<String>>,
 ) -> Result<(), String> {
     cancel.0.store(false, Ordering::Relaxed);
     let mut done_guard = OllamaDoneGuard::new(app.clone());
 
     let url = "http://127.0.0.1:11434/api/chat";
 
+    let mut message = serde_json::json!({
+        "role": "user",
+        "content": prompt
+    });
+
+    if let Some(imgs) = images {
+        if !imgs.is_empty() {
+            message["images"] = serde_json::json!(imgs);
+        }
+    }
+
     let request_body = serde_json::json!({
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [message],
         "stream": true
     });
 
@@ -161,6 +173,17 @@ async fn ollama_chat(
     Ok(())
 }
 
+#[tauri::command]
+async fn extract_pdf_text(data: String) -> Result<String, String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&data)
+        .map_err(|e| format!("Base64 decode error: {}", e))?;
+    let text = pdf_extract::extract_text_from_mem(&bytes)
+        .map_err(|e| format!("PDF extraction error: {}", e))?;
+    Ok(text)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -169,7 +192,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ollama_chat,
             cancel_chat,
-            list_models
+            list_models,
+            extract_pdf_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
