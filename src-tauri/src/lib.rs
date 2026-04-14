@@ -6,6 +6,33 @@ use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 struct CancelToken(Arc<AtomicBool>);
 
+struct OllamaDoneGuard {
+    app: tauri::AppHandle,
+    emitted: bool,
+}
+
+impl OllamaDoneGuard {
+    fn new(app: tauri::AppHandle) -> Self {
+        Self { app, emitted: false }
+    }
+
+    fn emit_done(&mut self) -> Result<(), String> {
+        self.app
+            .emit("ollama-done", ())
+            .map_err(|e| format!("Emit error: {}", e))?;
+        self.emitted = true;
+        Ok(())
+    }
+}
+
+impl Drop for OllamaDoneGuard {
+    fn drop(&mut self) {
+        if !self.emitted {
+            self.app.emit("ollama-done", ()).ok();
+        }
+    }
+}
+
 #[tauri::command]
 async fn list_models() -> Result<Vec<String>, String> {
     let client = Client::new();
@@ -39,6 +66,7 @@ async fn cancel_chat(cancel: tauri::State<'_, CancelToken>) -> Result<(), String
 #[tauri::command]
 async fn ollama_chat(app: tauri::AppHandle, cancel: tauri::State<'_, CancelToken>, prompt: &str, model: &str) -> Result<(), String> {
     cancel.0.store(false, Ordering::Relaxed);
+    let mut done_guard = OllamaDoneGuard::new(app.clone());
 
     let url = "http://127.0.0.1:11434/api/chat";
 
@@ -62,7 +90,6 @@ async fn ollama_chat(app: tauri::AppHandle, cancel: tauri::State<'_, CancelToken
 
     while let Some(chunk_result) = stream.next().await {
         if cancel.0.load(Ordering::Relaxed) {
-            app.emit("ollama-done", ()).ok();
             return Ok(());
         }
 
@@ -82,7 +109,7 @@ async fn ollama_chat(app: tauri::AppHandle, cancel: tauri::State<'_, CancelToken
 
             if let Some(done) = json.get("done").and_then(|d| d.as_bool()) {
                 if done {
-                    app.emit("ollama-done", ()).map_err(|e| format!("Emit error: {}", e))?;
+                    done_guard.emit_done()?;
                     return Ok(());
                 }
             }
