@@ -1,8 +1,11 @@
+use futures::StreamExt;
 use reqwest::Client;
 use serde_json;
-use futures::StreamExt;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tauri::Emitter;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 struct CancelToken(Arc<AtomicBool>);
 
@@ -13,7 +16,10 @@ struct OllamaDoneGuard {
 
 impl OllamaDoneGuard {
     fn new(app: tauri::AppHandle) -> Self {
-        Self { app, emitted: false }
+        Self {
+            app,
+            emitted: false,
+        }
     }
 
     fn emit_done(&mut self) -> Result<(), String> {
@@ -51,10 +57,13 @@ async fn list_models() -> Result<Vec<String>, String> {
 
     let models = json["models"]
         .as_array()
-        .unwrap_or(&vec![])
-        .iter()
-        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-        .collect();
+        .map(|models| {
+            models
+                .iter()
+                .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
 
     Ok(models)
 }
@@ -66,7 +75,12 @@ async fn cancel_chat(cancel: tauri::State<'_, CancelToken>) -> Result<(), String
 }
 
 #[tauri::command]
-async fn ollama_chat(app: tauri::AppHandle, cancel: tauri::State<'_, CancelToken>, prompt: &str, model: &str) -> Result<(), String> {
+async fn ollama_chat(
+    app: tauri::AppHandle,
+    cancel: tauri::State<'_, CancelToken>,
+    prompt: &str,
+    model: &str,
+) -> Result<(), String> {
     cancel.0.store(false, Ordering::Relaxed);
     let mut done_guard = OllamaDoneGuard::new(app.clone());
 
@@ -99,7 +113,7 @@ async fn ollama_chat(app: tauri::AppHandle, cancel: tauri::State<'_, CancelToken
         };
 
         app.emit("ollama-error", &error_message).ok();
-        app.emit("ollama-done", ()).ok();
+        done_guard.emit_done().ok();
         return Err(error_message);
     }
 
@@ -124,7 +138,8 @@ async fn ollama_chat(app: tauri::AppHandle, cancel: tauri::State<'_, CancelToken
                 continue;
             }
 
-            let json: serde_json::Value = serde_json::from_str(&line).map_err(|e| format!("JSON parse error: {}", e))?;
+            let json: serde_json::Value =
+                serde_json::from_str(&line).map_err(|e| format!("JSON parse error: {}", e))?;
 
             if let Some(done) = json.get("done").and_then(|d| d.as_bool()) {
                 if done {
@@ -136,7 +151,8 @@ async fn ollama_chat(app: tauri::AppHandle, cancel: tauri::State<'_, CancelToken
             if let Some(message) = json.get("message") {
                 if let Some(content) = message.get("content").and_then(|c| c.as_str()) {
                     full_content.push_str(content);
-                    app.emit("ollama-chunk", &full_content).map_err(|e| format!("Emit error: {}", e))?;
+                    app.emit("ollama-chunk", &full_content)
+                        .map_err(|e| format!("Emit error: {}", e))?;
                 }
             }
         }
@@ -150,7 +166,11 @@ pub fn run() {
     tauri::Builder::default()
         .manage(CancelToken(Arc::new(AtomicBool::new(false))))
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![ollama_chat, cancel_chat, list_models])
+        .invoke_handler(tauri::generate_handler![
+            ollama_chat,
+            cancel_chat,
+            list_models
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

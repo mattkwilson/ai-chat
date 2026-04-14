@@ -45,9 +45,15 @@ function App() {
           hasStartedRef.current = true;
         } else {
           setMessages((current) => {
-            const msgs = [...current];
-            msgs[msgs.length - 1].content = text;
-            return msgs;
+            if (current.length === 0) {
+              return current;
+            }
+
+            const lastIndex = current.length - 1;
+            return [
+              ...current.slice(0, lastIndex),
+              { ...current[lastIndex], content: text },
+            ];
           });
         }
       });
