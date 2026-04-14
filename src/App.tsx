@@ -237,7 +237,7 @@ function App() {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        setAttachments((prev) => [...prev, reader.result as string]);
+        setAttachments((prev) => [...prev, { type: "image", dataUrl: reader.result as string }]);
       };
       reader.readAsDataURL(file);
     });
