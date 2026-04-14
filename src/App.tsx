@@ -38,10 +38,13 @@ function App() {
       setThumbStyle({ top: 0, height: 0 });
       return;
     }
-    const ratio = clientHeight / scrollHeight;
+    const height = (clientHeight / scrollHeight) * 100;
+    const maxScrollTop = scrollHeight - clientHeight;
+    const availableTrack = 100 - height;
+    const top = maxScrollTop > 0 ? (scrollTop / maxScrollTop) * availableTrack : 0;
     setThumbStyle({
-      top: (scrollTop / scrollHeight) * 100,
-      height: ratio * 100,
+      top,
+      height,
     });
   };
 
