@@ -376,17 +376,3 @@ button:disabled {
   border: 1px solid rgba(248, 113, 113, 0.25);
   font-weight: 600;
 }
-
-@media (max-width: 720px) {
-  .header {
-    align-items: flex-start;
-  }
-
-  .input-row {
-    grid-template-columns: 1fr;
-  }
-
-  .settings {
-    width: 100%;
-  }
-}
