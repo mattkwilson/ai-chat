@@ -74,6 +74,37 @@ function App() {
     };
   }, []);
 
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragStartY = useRef<number | null>(null);
+  const dragStartScrollTop = useRef<number>(0);
+
+  const onThumbMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = messagesRef.current;
+    if (!el) return;
+    dragStartY.current = e.clientY;
+    dragStartScrollTop.current = el.scrollTop;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (dragStartY.current === null) return;
+      const track = trackRef.current;
+      if (!track || !el) return;
+      const trackHeight = track.clientHeight;
+      const dy = ev.clientY - dragStartY.current;
+      const scrollRatio = dy / trackHeight;
+      el.scrollTop = dragStartScrollTop.current + scrollRatio * el.scrollHeight;
+    };
+
+    const onMouseUp = () => {
+      dragStartY.current = null;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
   const updateThumb = () => {
     const el = messagesRef.current;
     if (!el) return;
@@ -194,10 +225,11 @@ function App() {
           )}
         </div>
         {thumbStyle.height > 0 && (
-          <div className="scrollbar-track">
+          <div className="scrollbar-track" ref={trackRef}>
             <div
               className="scrollbar-thumb"
               style={{ top: `${thumbStyle.top}%`, height: `${thumbStyle.height}%` }}
+              onMouseDown={onThumbMouseDown}
             />
           </div>
         )}

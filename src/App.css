@@ -137,11 +137,10 @@ body {
 
 .scrollbar-track {
   position: absolute;
-  right: -4px;
+  right: 6px;
   top: 0;
   bottom: 0;
   width: 6px;
-  pointer-events: none;
 }
 
 .scrollbar-thumb {
@@ -149,6 +148,11 @@ body {
   width: 6px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
+  cursor: grab;
+}
+
+.scrollbar-thumb:active {
+  cursor: grabbing;
 }
 
 .message {
