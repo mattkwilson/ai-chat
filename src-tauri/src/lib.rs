@@ -12,7 +12,16 @@ use tauri::Emitter;
 struct OllamaMessage {
     role: String,
     content: String,
+    #[serde(skip_serializing_if = "option_vec_is_none_or_empty")]
     images: Option<Vec<String>>,
+}
+
+fn option_vec_is_none_or_empty(value: &Option<Vec<String>>) -> bool {
+    value.as_ref().is_none_or(Vec::is_empty)
+}
+
+fn is_valid_role(role: &str) -> bool {
+    matches!(role, "user" | "assistant" | "system")
 }
 
 struct CancelToken(Arc<AtomicBool>);
@@ -96,6 +105,17 @@ async fn ollama_chat(
 
     if messages.is_empty() {
         return Err("At least one message is required.".to_string());
+    }
+
+    if let Some((index, invalid_role)) = messages
+        .iter()
+        .enumerate()
+        .find_map(|(i, m)| (!is_valid_role(&m.role)).then_some((i, m.role.as_str())))
+    {
+        return Err(format!(
+            "Invalid role at message index {}: '{}'. Allowed values are 'user', 'assistant', 'system'.",
+            index, invalid_role
+        ));
     }
 
     let request_body = serde_json::json!({

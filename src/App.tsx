@@ -13,6 +13,7 @@ type Attachment =
 type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
+  llmContent?: string; // exact content previously sent to / received from the model
   images?: string[]; // base64 data URLs for display
   pdfs?: string[];   // PDF filenames for display
 };
@@ -57,7 +58,7 @@ function App() {
         const text = event.payload as string;
         if (!hasStartedRef.current) {
           if (!text.trim()) return;
-          setMessages((current) => [...current, { role: "assistant", content: text }]);
+          setMessages((current) => [...current, { role: "assistant", content: text, llmContent: text }]);
           hasStartedRef.current = true;
         } else {
           setMessages((current) => {
@@ -68,7 +69,7 @@ function App() {
             const lastIndex = current.length - 1;
             return [
               ...current.slice(0, lastIndex),
-              { ...current[lastIndex], content: text },
+              { ...current[lastIndex], content: text, llmContent: text },
             ];
           });
         }
@@ -174,6 +175,7 @@ function App() {
     const userMessage: ChatMessage = {
       role: "user",
       content: prompt,
+      llmContent: fullPrompt,
       images: imageAttachments.length > 0 ? imageAttachments.map((a) => a.dataUrl) : undefined,
       pdfs: pdfAttachments.length > 0 ? pdfAttachments.map((p) => p.name) : undefined,
     };
@@ -182,13 +184,13 @@ function App() {
         if (message.role === "user" && message.images && message.images.length > 0) {
           return {
             role: message.role,
-            content: message.content,
+            content: message.llmContent ?? message.content,
             images: message.images.map((image) => image.includes(",") ? image.split(",")[1] : image),
           };
         }
         return {
           role: message.role,
-          content: message.content,
+          content: message.llmContent ?? message.content,
         };
       }),
       {
