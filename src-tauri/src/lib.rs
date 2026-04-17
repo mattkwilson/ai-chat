@@ -1,11 +1,19 @@
 use futures::StreamExt;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
 use tauri::Emitter;
+
+#[derive(Deserialize, Serialize)]
+struct OllamaMessage {
+    role: String,
+    content: String,
+    images: Option<Vec<String>>,
+}
 
 struct CancelToken(Arc<AtomicBool>);
 
@@ -78,29 +86,21 @@ async fn cancel_chat(cancel: tauri::State<'_, CancelToken>) -> Result<(), String
 async fn ollama_chat(
     app: tauri::AppHandle,
     cancel: tauri::State<'_, CancelToken>,
-    prompt: &str,
     model: &str,
-    images: Option<Vec<String>>,
+    messages: Vec<OllamaMessage>,
 ) -> Result<(), String> {
     cancel.0.store(false, Ordering::Relaxed);
     let mut done_guard = OllamaDoneGuard::new(app.clone());
 
     let url = "http://127.0.0.1:11434/api/chat";
 
-    let mut message = serde_json::json!({
-        "role": "user",
-        "content": prompt
-    });
-
-    if let Some(imgs) = images {
-        if !imgs.is_empty() {
-            message["images"] = serde_json::json!(imgs);
-        }
+    if messages.is_empty() {
+        return Err("At least one message is required.".to_string());
     }
 
     let request_body = serde_json::json!({
         "model": model,
-        "messages": [message],
+        "messages": messages,
         "stream": true
     });
 
