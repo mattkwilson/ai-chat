@@ -17,6 +17,12 @@ type ChatMessage = {
   pdfs?: string[];   // PDF filenames for display
 };
 
+type OllamaMessagePayload = {
+  role: "user" | "assistant" | "system";
+  content: string;
+  images?: string[];
+};
+
 function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -171,6 +177,26 @@ function App() {
       images: imageAttachments.length > 0 ? imageAttachments.map((a) => a.dataUrl) : undefined,
       pdfs: pdfAttachments.length > 0 ? pdfAttachments.map((p) => p.name) : undefined,
     };
+    const outgoingMessages: OllamaMessagePayload[] = [
+      ...messages.map((message) => {
+        if (message.role === "user" && message.images && message.images.length > 0) {
+          return {
+            role: message.role,
+            content: message.content,
+            images: message.images.map((image) => image.includes(",") ? image.split(",")[1] : image),
+          };
+        }
+        return {
+          role: message.role,
+          content: message.content,
+        };
+      }),
+      {
+        role: "user",
+        content: fullPrompt,
+        images: base64Images.length > 0 ? base64Images : undefined,
+      },
+    ];
     setAttachments([]);
     setMessages((current) => [...current, userMessage]);
     setLoading(true);
@@ -180,7 +206,7 @@ function App() {
       await new Promise<void>((resolve, reject) => {
         resolveRef.current = resolve;
         rejectRef.current = reject;
-        invoke('ollama_chat', { prompt: fullPrompt, model, images: base64Images.length > 0 ? base64Images : null }).catch((err) => {
+        invoke('ollama_chat', { model, messages: outgoingMessages }).catch((err) => {
           rejectRef.current?.(err);
           rejectRef.current = null;
           resolveRef.current = null;
